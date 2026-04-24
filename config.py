@@ -16,6 +16,6 @@ PG_CONFIG = {
     'password': '1234'  # ИЗМЕНИТЕ НА ВАШ ПАРОЛЬ
 }
 
-# НАСТРОЙКИ СБОРА
-MAX_POSTS = 30
-MAX_COMMENTS = 20
+
+MAX_POSTS = 1000
+MAX_COMMENTS = 1000
