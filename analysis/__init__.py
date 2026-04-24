@@ -1,4 +1,4 @@
-"""Модуль анализа деструктивного контента"""
+"""Модул анализа деструктивного контента"""
 
 from .classifier import DestructiveClassifier, classify_text
 from .analyzer import DataAnalyzer

@@ -1,5 +1,5 @@
 """
-analyzer.py - Анализ данных из PostgreSQL
+analyzer.py- Анализ данных из PostgreSQL
 """
 
 import psycopg2
