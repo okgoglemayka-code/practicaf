@@ -1,2 +1,5 @@
 psycopg2-binary>=2.9.0
 requests>=2.31.0
+dash>=2.14.0
+plotly>=5.17.0
+pandas>=2.0.0

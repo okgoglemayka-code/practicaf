@@ -13,7 +13,7 @@ PG_CONFIG = {
     'port': 5432,
     'database': 'vk_analysis',
     'user': 'postgres',
-    'password': '1234'  # ИЗМЕНИТЕ НА ВАШ ПАРОЛЬ
+    'password': '1234'
 }
 
 
