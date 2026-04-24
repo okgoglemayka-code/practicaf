@@ -16,7 +16,7 @@ from analysis.analyzer import DataAnalyzer
 
 def print_menu():
     """Вывод главного меню"""
-    print("\n" + "=" * 70)
+    print("\n" + "-" * 70)
     print("🛡️  АНАЛИЗ ДЕСТРУКТИВНОГО КОНТЕНТА В ВКОНТАКТЕ")
     print("=" * 70)
     print()
@@ -221,10 +221,7 @@ def main():
 
         elif choice == '1':
             # Полный анализ
-            print("\n" + "-" * 40)
-            limit = input("Максимум постов для анализа (Enter = 500): ").strip()
-            limit = int(limit) if limit else 500
-
+            limit =  500
             analyzer.run_full_analysis(limit=limit)
             input("\n   Нажмите Enter для продолжения...")
 

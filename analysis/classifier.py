@@ -20,13 +20,13 @@ except ImportError:
 
 class DestructiveCategory(Enum):
     """Категории деструктивного контента"""
-    SAFE = "safe"
-    AGGRESSION = "aggression"
-    SUICIDE = "suicide"
-    HATE_SPEECH = "hate_speech"
-    EXTREMISM = "extremism"
-    MISINFORMATION = "misinformation"
-    MANIPULATION = "manipulation"
+    SAFE = "Безопастно"
+    AGGRESSION = "Агрессия"
+    SUICIDE = "Суецид"
+    HATE_SPEECH = "Хейт спич"
+    EXTREMISM = "Экстремизм"
+    MISINFORMATION = "Дезинформация"
+    MANIPULATION = "Манипуляции"
     NEGATIVE = "negative"  # сильный негатив без явных маркеров
 
 

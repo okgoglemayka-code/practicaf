@@ -305,7 +305,7 @@ class DataAnalyzer:
             else:
                 print(f"   • {cat}: {count}")
 
-        print("\n🚨 ТОП-10 ОПАСНЫХ ПОСТОВ:")
+        print("\n ТОП-10 ОПАСНЫХ ПОСТОВ:")
         print("-" * 40)
         for i, (post_id, screen_name, text, category, level) in enumerate(stats['dangerous_posts'][:10], 1):
             text_preview = text[:80].replace('\n', ' ') + ('...' if len(text) > 80 else '')
@@ -334,6 +334,7 @@ class DataAnalyzer:
         self.print_statistics(stats)
 
         print("\n" + "=" * 70)
+
         print(f"✅ АНАЛИЗ ЗАВЕРШЁН")
         print(f"   Обработано постов: {analyze_stats['processed']}")
         print("=" * 70)
