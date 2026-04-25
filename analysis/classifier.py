@@ -10,10 +10,14 @@ from enum import Enum
 # Импорт словарей
 from .dictionaries import (
     DESTRUCTIVE_DICTIONARIES,
+    LEMMATIZED_DICTIONARIES,  # НОВЫЙ ИМПОРТ
     SYMBOL_REPLACEMENTS,
     COMPLEX_PATTERNS,
     get_categories_levels
 )
+
+# Импорт лемматизатора (НОВЫЙ ИМПОРТ)
+from .lemmatizer import lemmatize, get_lemmatizer
 
 
 class DestructiveCategory(Enum):
@@ -57,20 +61,40 @@ def normalize_text(text: str) -> str:
 
 
 class DestructiveClassifier:
-    """Классификатор деструктивного контента"""
+    """Классификатор деструктивного контента с поддержкой лемматизации"""
 
-    def __init__(self):
+    def __init__(self, use_lemmatization: bool = True):
+        """
+        Args:
+            use_lemmatization: использовать ли лемматизацию (рекомендуется True)
+        """
+        self.use_lemmatization = use_lemmatization
         self.use_transformers = False
-        self._prepare_dictionaries()
-        print("✅ Классификатор загружен (расширенный словарь)")
+
+        if use_lemmatization:
+            # Загружаем лемматизатор (теперь использует Natasha)
+            self.lemmatizer = get_lemmatizer()
+            # Используем лемматизированные словари
+            from .dictionaries import LEMMATIZED_DICTIONARIES
+            self.keywords = {}
+            self.category_levels = {}
+
+            for category_name, data in LEMMATIZED_DICTIONARIES.items():
+                cat_enum = getattr(DestructiveCategory, category_name.upper(), None)
+                if cat_enum:
+                    self.keywords[cat_enum] = data['lemmas']
+                    self.category_levels[cat_enum] = DestructiveLevel(data['level'])
+            print("✅ Классификатор загружен (лемматизация включена)")
+        else:
+            self._prepare_dictionaries()
+            print("✅ Классификатор загружен (лемматизация выключена)")
 
     def _prepare_dictionaries(self):
-        """Подготовка словарей из внешнего файла"""
+        """Подготовка обычных словарей (без лемматизации)"""
         self.keywords = {}
         self.category_levels = {}
 
         for category_name, data in DESTRUCTIVE_DICTIONARIES.items():
-            # Преобразуем строку в enum
             cat_enum = getattr(DestructiveCategory, category_name.upper(), None)
             if cat_enum:
                 self.keywords[cat_enum] = data['keywords']
@@ -95,33 +119,42 @@ class DestructiveClassifier:
         }
 
     def _keyword_search(self, text: str) -> Tuple[Optional[DestructiveCategory], List[str], Optional[DestructiveLevel]]:
-        """Поиск ключевых слов в тексте"""
-        text_lower = text.lower()
+        """
+        Поиск ключевых слов в тексте.
+        Если включена лемматизация, ищем по леммам.
+        """
+        # Если используется лемматизация, применяем её к тексту
+        if self.use_lemmatization:
+            search_text = lemmatize(text)
+        else:
+            search_text = text.lower()
+
         matched_words = []
         best_category = None
         best_level = DestructiveLevel.NONE
 
-        # Прямой поиск по словарям
+        # Поиск по словарям
         for category, words in self.keywords.items():
             for word in words:
-                if word in text_lower:
+                if word in search_text:
                     matched_words.append(word)
                     level = self.category_levels.get(category, DestructiveLevel.MEDIUM)
                     if level.value > best_level.value:
                         best_level = level
                         best_category = category
 
-        # Поиск по сложным паттернам (регулярные выражения)
-        for category_name, patterns in COMPLEX_PATTERNS.items():
-            cat_enum = getattr(DestructiveCategory, category_name.upper(), None)
-            if cat_enum:
-                for pattern in patterns:
-                    if re.search(pattern, text_lower):
-                        matched_words.append(f"regex:{category_name}")
-                        level = self.category_levels.get(cat_enum, DestructiveLevel.MEDIUM)
-                        if level.value > best_level.value:
-                            best_level = level
-                            best_category = cat_enum
+        # Поиск по сложным паттернам (только без лемматизации)
+        if not self.use_lemmatization:
+            for category_name, patterns in COMPLEX_PATTERNS.items():
+                cat_enum = getattr(DestructiveCategory, category_name.upper(), None)
+                if cat_enum:
+                    for pattern in patterns:
+                        if re.search(pattern, search_text):
+                            matched_words.append(f"regex:{category_name}")
+                            level = self.category_levels.get(cat_enum, DestructiveLevel.MEDIUM)
+                            if level.value > best_level.value:
+                                best_level = level
+                                best_category = cat_enum
 
         return best_category, matched_words, best_level
 
@@ -150,10 +183,10 @@ class DestructiveClassifier:
                 matched_words=[]
             )
 
-        # Нормализация текста
+        # Нормализация текста (замена символов)
         normalized_text = normalize_text(text)
 
-        # 1. Словарный поиск
+        # 1. Словарный поиск (с лемматизацией или без)
         keyword_category, matched_words, keyword_level = self._keyword_search(normalized_text)
 
         # 2. Анализ тональности
@@ -227,8 +260,8 @@ class DestructiveClassifier:
         )
 
 
-def classify_text(text: str) -> Tuple[str, int, float]:
+def classify_text(text: str, use_lemmatization: bool = True) -> Tuple[str, int, float]:
     """Быстрая классификация текста"""
-    classifier = DestructiveClassifier()
+    classifier = DestructiveClassifier(use_lemmatization=use_lemmatization)
     result = classifier.classify(text)
     return (result.category.value, result.level.value, result.confidence)

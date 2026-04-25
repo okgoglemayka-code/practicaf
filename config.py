@@ -17,7 +17,7 @@ PG_CONFIG = {
 }
 
 
-MAX_POSTS = 320
+MAX_POSTS = 100
 MAX_COMMENTS = 1000
 
 # НАСТРОЙКИ АНАЛИЗА
