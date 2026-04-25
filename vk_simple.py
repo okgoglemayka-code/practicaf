@@ -1,5 +1,5 @@
 """
-vk_simple.py - Сборщик постов и комментариев (без OCR)
+vk_simple.py - Сборщик постов и комментариев (с пагинацией)
 """
 
 import requests
@@ -11,7 +11,10 @@ import config
 
 
 def get_posts(community_url: str, max_posts: int = None) -> List[Dict]:
-    """Сбор постов из сообщества"""
+    """
+    Сбор постов из сообщества с поддержкой пагинации
+    Теперь может собрать больше 100 постов
+    """
 
     if max_posts is None:
         max_posts = config.MAX_POSTS
@@ -39,67 +42,116 @@ def get_posts(community_url: str, max_posts: int = None) -> List[Dict]:
     group_id = -resp['response']['object_id']
     print(f"   ID сообщества: {group_id}")
 
-    # Получаем посты
-    time.sleep(config.REQUEST_DELAY)
-    resp = requests.get('https://api.vk.com/method/wall.get', params={
-        'owner_id': group_id,
-        'count': max_posts,
-        'access_token': config.VK_TOKEN,
-        'v': config.VK_API_VERSION
-    }).json()
+    # ============================================================
+    # ПАГИНАЦИЯ: собираем посты по 100 штук за раз
+    # ============================================================
 
-    if 'response' not in resp:
-        print(f"❌ Не удалось получить посты для {screen_name}")
-        return []
+    all_posts = []
+    offset = 0
+    batch_size = min(100, max_posts)  # VK API максимум 100 за раз
 
-    posts = []
-    for item in resp['response']['items']:
-        post = {
-            'post_id': item['id'],
-            'owner_id': item['owner_id'],
-            'text': item.get('text', ''),
-            'date': datetime.fromtimestamp(item['date']),
-            'timestamp': item['date'],
-            'likes': item['likes']['count'],
-            'reposts': item['reposts']['count'],
-            'comments_count': item['comments']['count'],
-            'views': item.get('views', {}).get('count', 0),
-            'url': f"https://vk.com/wall{item['owner_id']}_{item['id']}"
-        }
-        posts.append(post)
+    print(f"   Нужно собрать: {max_posts} постов")
 
-    print(f"   📦 Собрано постов: {len(posts)}")
-    return posts
+    while len(all_posts) < max_posts:
+        # Сколько ещё нужно собрать
+        remaining = max_posts - len(all_posts)
+        current_count = min(batch_size, remaining)
+
+        print(f"   Запрос {offset//100 + 1}: посты {offset+1}-{offset+current_count}...", end=" ")
+
+        time.sleep(config.REQUEST_DELAY)
+        resp = requests.get('https://api.vk.com/method/wall.get', params={
+            'owner_id': group_id,
+            'count': current_count,
+            'offset': offset,
+            'access_token': config.VK_TOKEN,
+            'v': config.VK_API_VERSION
+        }).json()
+
+        if 'response' not in resp:
+            print(f"❌ Ошибка: {resp}")
+            break
+
+        items = resp['response']['items']
+
+        if not items:
+            print("постов больше нет")
+            break
+
+        for item in items:
+            post = {
+                'post_id': item['id'],
+                'owner_id': item['owner_id'],
+                'text': item.get('text', ''),
+                'date': datetime.fromtimestamp(item['date']),
+                'timestamp': item['date'],
+                'likes': item['likes']['count'],
+                'reposts': item['reposts']['count'],
+                'comments_count': item['comments']['count'],
+                'views': item.get('views', {}).get('count', 0),
+                'url': f"https://vk.com/wall{item['owner_id']}_{item['id']}"
+            }
+            all_posts.append(post)
+
+        print(f"✅ +{len(items)} (всего: {len(all_posts)})")
+
+        offset += len(items)
+
+        # Если получили меньше, чем запрашивали — значит посты закончились
+        if len(items) < current_count:
+            print(f"   Достигнут конец стены")
+            break
+
+    print(f"\n   📦 ВСЕГО собрано постов: {len(all_posts)}")
+    return all_posts
 
 
 def get_comments(owner_id: int, post_id: int, max_comments: int = 100) -> List[Dict]:
-    """Сбор комментариев к посту"""
+    """Сбор комментариев к посту (тоже с пагинацией)"""
 
-    time.sleep(config.REQUEST_DELAY)
+    all_comments = []
+    offset = 0
+    batch_size = min(100, max_comments)
 
-    resp = requests.get('https://api.vk.com/method/wall.getComments', params={
-        'owner_id': owner_id,
-        'post_id': post_id,
-        'count': min(max_comments, 100),
-        'need_likes': 1,
-        'access_token': config.VK_TOKEN,
-        'v': config.VK_API_VERSION
-    }).json()
+    while len(all_comments) < max_comments:
+        remaining = max_comments - len(all_comments)
+        current_count = min(batch_size, remaining)
 
-    if 'response' not in resp:
-        return []
+        time.sleep(config.REQUEST_DELAY)
 
-    comments = []
-    for item in resp['response']['items']:
-        comment = {
-            'comment_id': item['id'],
+        resp = requests.get('https://api.vk.com/method/wall.getComments', params={
+            'owner_id': owner_id,
             'post_id': post_id,
-            'owner_id': item.get('from_id', 0),
-            'text': item.get('text', ''),
-            'date': datetime.fromtimestamp(item['date']),
-            'timestamp': item['date'],
-            'likes': item.get('likes', {}).get('count', 0)
-        }
-        comments.append(comment)
+            'count': current_count,
+            'offset': offset,
+            'need_likes': 1,
+            'access_token': config.VK_TOKEN,
+            'v': config.VK_API_VERSION
+        }).json()
 
-    return comments
+        if 'response' not in resp:
+            break
+
+        items = resp['response']['items']
+
+        if not items:
+            break
+
+        for item in items:
+            comment = {
+                'comment_id': item['id'],
+                'post_id': post_id,
+                'owner_id': item.get('from_id', 0),
+                'text': item.get('text', ''),
+                'date': datetime.fromtimestamp(item['date']),
+                'timestamp': item['date'],
+                'likes': item.get('likes', {}).get('count', 0)
+            }
+            all_comments.append(comment)
+
+        offset += len(items)
+
+        if len(items) < current_count:
+            break
+
+    return all_comments
