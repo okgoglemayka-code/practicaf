@@ -1,3 +1,4 @@
+
 """Модуль анализа деструктивного контента"""
 
 from .classifier import DestructiveClassifier, classify_text

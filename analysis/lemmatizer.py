@@ -121,8 +121,14 @@ class RussianLemmatizer:
 
             return ' '.join(lemmas)
         except Exception as e:
-            # Fallback на упрощённый режим
-            return self.lemmatize_simple(text)
+            def lemmatize(self, text: str) -> str:
+                if not text or len(text) < 2:
+                    return text
+
+                if self.use_natasha:
+                    return self.lemmatize_natasha(text)
+
+                return self.lemmatize_simple(text)
 
     def lemmatize_simple(self, text: str) -> str:
         """Упрощённая лемматизация текста"""

@@ -21,7 +21,7 @@ def get_posts(community_url: str, max_posts: int = None) -> List[Dict]:
 
     match = re.search(r'vk\.com/([a-zA-Z0-9_]+)', community_url)
     if not match:
-        print(f"❌ Не удалось извлечь имя из URL: {community_url}")
+        print(f" Не удалось извлечь имя из URL: {community_url}")
         return []
 
     screen_name = match.group(1)
