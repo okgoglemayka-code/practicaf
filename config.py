@@ -17,10 +17,25 @@ PG_CONFIG = {
 }
 
 
-MAX_POSTS = 10
-MAX_COMMENTS = 1000
+MAX_POSTS = 100
+MAX_COMMENTS = 100
 
 # НАСТРОЙКИ АНАЛИЗА
 ANALYSIS_BATCH_SIZE = 500
 SENTIMENT_THRESHOLD_NEGATIVE = 0.7
 MIN_TEXT_LENGTH_ANALYSIS = 5
+# ДОПОЛНИТЕЛЬНЫЙ NLP/ИИ-МОДУЛЬ
+# По умолчанию выключен, чтобы проект запускался без внешних моделей.
+# Для включения установите Ollama, скачайте модель и поставьте ENABLE_NLP_AI = True.
+# Пример команды: ollama pull qwen2.5:7b-instruct
+ENABLE_NLP_AI = True
+NLP_AI_PROVIDER = "ollama"
+NLP_AI_MODEL = "qwen2.5:7b-instruct"
+NLP_AI_URL = "http://localhost:11434/api/generate"
+NLP_AI_TIMEOUT = 30
+NLP_AI_TEMPERATURE = 0.0
+NLP_AI_MAX_TEXT_LENGTH = 1200
+
+# Если True, NLP/ИИ-модель вызывается для каждого текста достаточной длины.
+# Если False, модель вызывается только для спорных случаев.
+NLP_AI_ALWAYS_ANALYZE = False

@@ -29,6 +29,7 @@ from .dictionaries import (
     SCORE_THRESHOLDS,
 )
 from .lemmatizer import lemmatize, get_lemmatizer
+from .nlp_ai import get_ai_analyzer
 
 
 class DestructiveCategory(Enum):
@@ -90,6 +91,7 @@ class DestructiveClassifier:
     def __init__(self, use_lemmatization: bool = True):
         self.use_lemmatization = use_lemmatization
         self.use_transformers = False
+        self.ai_analyzer = get_ai_analyzer()
 
         if use_lemmatization:
             self.lemmatizer = get_lemmatizer()
@@ -350,6 +352,109 @@ class DestructiveClassifier:
         confidence = 0.45 + min(score, 10) * 0.05 + neg_score * 0.10
         return round(min(confidence, 0.95), 2)
 
+    def _category_from_value(self, value: str) -> DestructiveCategory:
+        """Безопасное преобразование строки категории в Enum."""
+        for category in DestructiveCategory:
+            if category.value == value:
+                return category
+        return DestructiveCategory.SAFE
+
+    def _combine_with_ai(
+        self,
+        base_result: ClassificationResult,
+        text: str,
+    ) -> ClassificationResult:
+        """
+        Объединяет результат scoring-модели с дополнительной NLP/AI-моделью.
+
+        AI не заменяет базовую модель полностью, а используется как второй эксперт:
+        - если AI уверен и видит более высокий риск, итоговый уровень повышается;
+        - если базовая модель дала средний риск, а AI уверен, что это безопасный контекст,
+          итоговый уровень может быть снижен;
+        - при ошибке AI возвращается исходный результат.
+        """
+        base_payload = {
+            "category": base_result.category.value,
+            "level": base_result.level.value,
+            "score": base_result.score,
+            "confidence": base_result.confidence,
+            "reason": base_result.reason,
+            "matched_words": base_result.matched_words,
+        }
+
+        if not self.ai_analyzer.should_analyze(
+            base_score=base_result.score,
+            base_confidence=base_result.confidence,
+            base_category=base_result.category.value,
+            text=text,
+        ):
+            return base_result
+
+        ai = self.ai_analyzer.analyze(text=text, base_result=base_payload)
+        details = list(base_result.score_details)
+
+        if not ai.available:
+            details.append(f"AI/NLP слой не применён: {ai.reason}")
+            base_result.score_details = details
+            return base_result
+
+        ai_category = self._category_from_value(ai.category)
+        ai_level = DestructiveLevel(ai.level)
+
+        # Случай 1: AI уверенно подтверждает или повышает опасность.
+        if ai.confidence >= 0.70 and ai_level.value > base_result.level.value:
+            new_score = max(base_result.score, ai.level * 3)
+            new_confidence = round(min(0.97, (base_result.confidence + ai.confidence) / 2 + 0.08), 2)
+            details.append(f"AI/NLP повысил риск: {ai.reason} (conf={ai.confidence:.2f})")
+            return ClassificationResult(
+                category=ai_category,
+                level=ai_level,
+                confidence=new_confidence,
+                reason=(base_result.reason + f"; AI/NLP: {ai.reason}")[:500],
+                matched_words=list(dict.fromkeys(base_result.matched_words + ai.matched_words))[:10],
+                sentiment_score=base_result.sentiment_score,
+                score=new_score,
+                score_details=details,
+            )
+
+        # Случай 2: базовая модель нашла низкий/средний риск, но AI уверенно видит безопасный контекст.
+        if (
+            ai.confidence >= 0.80
+            and ai_level == DestructiveLevel.NONE
+            and base_result.level in {DestructiveLevel.LOW, DestructiveLevel.MEDIUM}
+        ):
+            lowered_level = DestructiveLevel.LOW if base_result.level == DestructiveLevel.MEDIUM else DestructiveLevel.NONE
+            lowered_category = DestructiveCategory.NEGATIVE if lowered_level == DestructiveLevel.LOW else DestructiveCategory.SAFE
+            lowered_score = min(base_result.score, 3 if lowered_level == DestructiveLevel.LOW else 1)
+            details.append(f"AI/NLP снизил риск как безопасный контекст: {ai.reason} (conf={ai.confidence:.2f})")
+            return ClassificationResult(
+                category=lowered_category,
+                level=lowered_level,
+                confidence=round(max(base_result.confidence, ai.confidence), 2),
+                reason=(base_result.reason + f"; AI/NLP снизил риск: {ai.reason}")[:500],
+                matched_words=base_result.matched_words,
+                sentiment_score=base_result.sentiment_score,
+                score=lowered_score,
+                score_details=details,
+            )
+
+        # Случай 3: AI подтверждает текущую категорию/уровень — повышаем уверенность.
+        if ai.confidence >= 0.70 and ai_category == base_result.category and ai_level == base_result.level:
+            details.append(f"AI/NLP подтвердил решение: {ai.reason} (conf={ai.confidence:.2f})")
+            base_result.confidence = round(min(0.97, max(base_result.confidence, ai.confidence)), 2)
+            base_result.reason = (base_result.reason + f"; AI/NLP подтвердил: {ai.reason}")[:500]
+            base_result.matched_words = list(dict.fromkeys(base_result.matched_words + ai.matched_words))[:10]
+            base_result.score_details = details
+            return base_result
+
+        # Случай 4: AI дал другое мнение, но недостаточно уверенное — сохраняем как пояснение.
+        details.append(
+            f"AI/NLP мнение без изменения решения: category={ai.category}, "
+            f"level={ai.level}, conf={ai.confidence:.2f}, reason={ai.reason}"
+        )
+        base_result.score_details = details
+        return base_result
+
     def classify(self, text: str) -> ClassificationResult:
         """Основной метод классификации по балльной модели."""
         if not text or len(text.strip()) < 3:
@@ -415,7 +520,7 @@ class DestructiveClassifier:
 
         if not best_data or best_data['score'] <= 1:
             if neg_score > 0.75:
-                return ClassificationResult(
+                base_result = ClassificationResult(
                     category=DestructiveCategory.NEGATIVE,
                     level=DestructiveLevel.LOW,
                     confidence=round(neg_score, 2),
@@ -425,8 +530,9 @@ class DestructiveClassifier:
                     score=2,
                     score_details=[f"негативная тональность (+2): {neg_score:.2f}"]
                 )
+                return self._combine_with_ai(base_result, text)
 
-            return ClassificationResult(
+            base_result = ClassificationResult(
                 category=DestructiveCategory.SAFE,
                 level=DestructiveLevel.NONE,
                 confidence=round(max(0.7, 1.0 - neg_score), 2),
@@ -436,13 +542,14 @@ class DestructiveClassifier:
                 score=0,
                 score_details=penalty_details
             )
+            return self._combine_with_ai(base_result, text)
 
         final_score = int(best_data['score'])
         final_level = self._score_to_level(final_score, best_cat)
         confidence = self._confidence_from_score(final_score, neg_score)
 
         if final_level == DestructiveLevel.NONE:
-            return ClassificationResult(
+            base_result = ClassificationResult(
                 category=DestructiveCategory.SAFE,
                 level=DestructiveLevel.NONE,
                 confidence=round(max(0.7, 1.0 - neg_score), 2),
@@ -452,10 +559,11 @@ class DestructiveClassifier:
                 score=final_score,
                 score_details=best_data['details']
             )
+            return self._combine_with_ai(base_result, text)
 
         reason = f"итоговый балл риска: {final_score}; " + "; ".join(best_data['details'][:3])
 
-        return ClassificationResult(
+        base_result = ClassificationResult(
             category=best_cat,
             level=final_level,
             confidence=confidence,
@@ -465,6 +573,7 @@ class DestructiveClassifier:
             score=final_score,
             score_details=best_data['details']
         )
+        return self._combine_with_ai(base_result, text)
 
 
 def classify_text(text: str, use_lemmatization: bool = True) -> Tuple[str, int, float]:
