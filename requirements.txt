@@ -3,5 +3,4 @@ requests>=2.31.0
 dash>=2.14.0
 plotly>=5.17.0
 pandas>=2.0.0
-natasha>=1.6.0
-razdel>=0.5.0
+XlsxWriter>=3.2.0
