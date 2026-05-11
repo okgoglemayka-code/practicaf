@@ -652,31 +652,11 @@ class DestructiveClassifier:
 
         # 5. Если балл слишком низкий, но есть сильная негативность.
         if not best_data or best_data["score"] <= 1:
-            if neg_score > 0.75:
-                confidence = self._confidence_from_components(
-                    score=2,
-                    neg_score=neg_score,
-                    stats=stats
-                )
-
-                base_result = ClassificationResult(
-                    category=DestructiveCategory.NEGATIVE,
-                    level=DestructiveLevel.LOW,
-                    confidence=confidence,
-                    reason=f"высокая негативная тональность ({neg_score:.2f}), но нет критических маркеров",
-                    matched_words=[],
-                    sentiment_score=neg_score,
-                    score=2,
-                    score_details=[f"негативная тональность (+2): {neg_score:.2f}"]
-                )
-
-                return self._combine_with_ai(base_result, text)
-
             base_result = ClassificationResult(
                 category=DestructiveCategory.SAFE,
                 level=DestructiveLevel.NONE,
-                confidence=round(max(0.7, 1.0 - neg_score), 2),
-                reason="нет достаточных деструктивных маркеров",
+                confidence=round(max(0.7, 1.0 - neg_score * 0.3), 2),
+                reason="нет достаточных деструктивных маркеров; одной тональности недостаточно для классификации как деструктивного текста",
                 matched_words=[],
                 sentiment_score=neg_score,
                 score=0,

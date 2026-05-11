@@ -1,8 +1,5 @@
 """
 train_confidence.py - обучение весов для расчёта уверенности.
-
-Запуск:
-python train_confidence.py
 """
 
 from analysis.confidence_model import ConfidenceModel, load_training_samples
