@@ -16,8 +16,8 @@ def main():
     model = ConfidenceModel()
     model.train(
         samples=samples,
-        epochs=1000,
-        learning_rate=0.1
+        epochs=500,
+        learning_rate=0.03
     )
 
     print("✅ Обучение завершено")
